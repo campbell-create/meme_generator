@@ -2,15 +2,13 @@ import sys
 from PIL import Image, ImageChops
 from copy import deepcopy
 import numpy as np
-# no i dont remember which of the PIL things are necessary and at this point i
-# dont care. i am fed up with pillow and its documentation sucks ass
 
 # look if anyone tries to critique my style here i will be upset
 # good programming practice is for work and only work
 # do you want party reaccs? then dont critique my crap style
 # theres comments and thats only because i solved my problems before bedtime
 
-colors = [
+COLORS = [
     0xff8d8b,
     0xfed689,
     0x88ff89,
@@ -26,10 +24,10 @@ colors = [
 def party(file_path, out_file_path):
     ''' Takes an image and makes it party.
 
-        doesnt read in a gif only a still image. will NOT work
+        doesnt read in a gif only a still image.
         i'll figure out gifs later.
         one thing at a time.
-        do NOT provide suggestions on how to do gifs.
+        Chris do NOT provide suggestions on how to do gifs.
 
         just because this produces gifs doesnt mean that it will
         produce gifs *for mattermost*
@@ -38,7 +36,7 @@ def party(file_path, out_file_path):
     im = Image.open(file_path)
     out_images = []
     for frame in range(0, 10):
-        color_image = Image.new('RGBA', (im.height, im.width), colors[frame])
+        color_image = Image.new('RGBA', (im.height, im.width), COLORS[frame])
         image = ImageChops.multiply(color_image, im)
         out_images.append(image)
 
