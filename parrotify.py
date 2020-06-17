@@ -1,33 +1,44 @@
-"""
-okay this took me like four days to perfect
-i hate pillow now, its docs should be clearer,,
-i s2g it should do much more much more simply
+""" okay this took me like four days to perfect i hate pillow now, its docs
+should be clearer,, i s2g it should do much more much more simply half of my
+problems were because the save function is so horribly documented. this
+function will almost certainly be much simpler in the future
 """
 
-from PIL import Image, GifImagePlugin, ImageChops, ImageOps, ImageEnhance, ImageDraw
+import sys
+from PIL import Image
 from copy import deepcopy
 import numpy as np
 # again idk which of the above i actually need its late
 
+FOCUS = [
+    [16, 11],
+    [12, 10],
+    [9, 10],
+    [4, 11],
+    [4, 12],
+    [6, 14],
+    [10, 16],
+    [15, 14],
+    [17, 13],
+    [18, 12],
+]
+
 def parrot(file_path, out_path):
+    """ Convert an image into a parrot.
+
+
+        Overlays the parrot shape over your image
+        Also makes the background transparent
+        I'm proud of that because i had to deep
+        dive the docs to find that
+
+    """
     im = Image.open('mega_transparent.gif')
     mask = im
     im.seek(0)
 
-    focus = [
-        [16, 11],
-        [12, 10],
-        [9, 10],
-        [4, 11],
-        [4, 12],
-        [6, 14],
-        [10, 16],
-        [15, 14],
-        [17, 13],
-        [18, 12],
-    ]
-
     frames = []
+    # convert the parrot into an overlay mask
     for index in range(0, im.n_frames):
         im.seek(index)
         im2 = im.convert(mode='RGBA')
@@ -44,7 +55,7 @@ def parrot(file_path, out_path):
     im = Image.open('mega_blank_solid.gif')
     out = []
     for i in range(0, 10):
-        offset = -(13-focus[i][1])*9+20
+        offset = -(13-FOCUS[i][1])*9+20
         flag = Image.open(file_path)
         flag = flag.convert('RGBA')
         flag = flag.resize((im.width, im.height))
@@ -66,4 +77,9 @@ def parrot(file_path, out_path):
     out[0].save(out_path, save_all=True, append_images=out[1:], optimize=False, duration=50, loop=0, transparency=0, disposal=2)
 
 if __name__ == '__main__':
-    parrot('gq_flag.png', 'gq_parrot.gif')
+    if len(sys.argv) == 1:
+        parrot('gq_flag.png', 'gq_parrot.gif')
+    elif len(sys.argv) != 3:
+        print("Please provide one source file and one destination file")
+    else:
+        parrot(sys.argv[1], sys.argv[2])

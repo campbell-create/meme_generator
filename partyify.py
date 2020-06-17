@@ -1,4 +1,5 @@
-from PIL import Image, GifImagePlugin, ImageChops, ImageOps, ImageEnhance, ImageDraw
+import sys
+from PIL import Image, ImageChops
 from copy import deepcopy
 import numpy as np
 # no i dont remember which of the PIL things are necessary and at this point i
@@ -44,4 +45,10 @@ def party(file_path, out_file_path):
     out_images[0].save(out_file_path, save_all=True, append_images=out_images[1:], optimize=True, duration=50, loop=0)
 
 if __name__ == '__main__':
-    party('smile_cry.png', 'smile_cry.gif')
+    if len(sys.argv) == 1:
+        party('smile_cry.png', 'smile_cry.gif')
+    elif len(sys.argv) != 3:
+        print("Please provide one source file and one destination file")
+    else:
+        party(sys.argv[1], sys.argv[2])
+
