@@ -23,7 +23,7 @@ FOCUS = [
     [18, 12],
 ]
 
-def parrot(file_path, out_path):
+def parrot(file_path, out_path, x_delta=0, y_delta=0):
     """ Convert an image into a parrot.
 
 
@@ -37,28 +37,86 @@ def parrot(file_path, out_path):
 
     frames = []
     # convert the parrot into an overlay mask
+    # but we're also going to shrink the black region slightly
+    # using "advanced computer vision algorithms"
     for index in range(0, im.n_frames):
         im.seek(index)
         im2 = im.convert(mode='RGBA')
         frame = np.array(im2)
+        original = deepcopy(frame)
         for i in range(frame.shape[0]):
             for j in range(frame.shape[1]):
-                if frame[i,j,3] >= 200:
-                    frame[i,j] = (255,255,255,255)
+                # now we're going to see if neighbor pixels
+                # are mostly transparent(T) or opaque (o)
+                # if mostly T, then this pixel is T
+                # and o if theyre mostly o
+                # this would normally be a convolution but im interested
+                # in preserving alpha values and im not thinking too much rn
+                thresh = 255
+                if i > 1:
+                    left = original[i-1, j, 3] < thresh
                 else:
+                    left = False
+                if i < frame.shape[0]-1:
+                    right = original[i+1, j, 3] < thresh
+                else:
+                    right = False
+                if j > 1: 
+                    upper = original[i, j-1, 3] < thresh
+                else:
+                    upper = False
+                if j < frame.shape[1]-1:
+                    lower = original[i, j+1, 3] < thresh
+                else:
+                    lower = False
+                curr = original[i, j, 3] < thresh
+                if left and right and upper and lower and curr:
                     frame[i,j] = (0, 0, 0, 0)
+                else:
+                    frame[i,j] = (255,255,255,255)
+        original = deepcopy(frame) # update "constant" frame
+        for i in range(frame.shape[0]):
+            for j in range(frame.shape[1]):
+                thresh = 255
+                if i > 1:
+                    left = original[i-1, j, 3] < thresh
+                else:
+                    left = False
+                if i < frame.shape[0]-1:
+                    right = original[i+1, j, 3] < thresh
+                else:
+                    right = False
+                if j > 1: 
+                    upper = original[i, j-1, 3] < thresh
+                else:
+                    upper = False
+                if j < frame.shape[1]-1:
+                    lower = original[i, j+1, 3] < thresh
+                else:
+                    lower = False
+                curr = original[i, j, 3] < thresh
+                #print(int(left + right + upper + lower + curr))
+                if left or right or upper or lower or curr:
+                    #if int(left + right + upper + lower + curr) > 2:
+                    frame[i,j] = (0, 0, 0, 0)
+                else:
+                    frame[i,j] = (255, 255, 255, 255)
         tframe = Image.fromarray(frame, mode='RGBA')
         frames.append(tframe)
+        if index < 1:
+            tframe.save('frame.png')
 
-    im = Image.open('data/mega_solid.gif')
+    im = Image.open('data/mega_blank_solid.gif')
     out = []
     for i in range(0, 10):
-        offset = -(13-FOCUS[i][1])*9+20
+        x, y = FOCUS[i]
+        y_offset = -(13-y)*9+20+y_delta
+        x_offset = x*9-90+x_delta
         flag = Image.open(file_path)
         flag = flag.convert('RGBA')
         flag = flag.resize((im.width, im.height))
         tflag = deepcopy(flag)
-        tflag.paste(flag, (0, offset))
+        tflag.paste(flag, (x_offset, y_offset))
         im.seek(i)
         tflag.paste(im, (0,0), mask=frames[i])
         flag = deepcopy(tflag)
