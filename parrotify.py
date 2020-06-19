@@ -33,9 +33,7 @@ def parrot(file_path, out_path):
         dive the docs to find that
 
     """
-    im = Image.open('mega_transparent.gif')
-    mask = im
-    im.seek(0)
+    im = Image.open('data/mega_transparent.gif')
 
     frames = []
     # convert the parrot into an overlay mask
@@ -52,7 +50,7 @@ def parrot(file_path, out_path):
         tframe = Image.fromarray(frame, mode='RGBA')
         frames.append(tframe)
 
-    im = Image.open('mega_blank_solid.gif')
+    im = Image.open('data/mega_solid.gif')
     out = []
     for i in range(0, 10):
         offset = -(13-FOCUS[i][1])*9+20
@@ -77,9 +75,12 @@ def parrot(file_path, out_path):
     out[0].save(out_path, save_all=True, append_images=out[1:], optimize=False, duration=50, loop=0, transparency=0, disposal=2)
 
 if __name__ == '__main__':
+    # this is complicated enough its almost ready to argparse
     if len(sys.argv) == 1:
-        parrot('gq_flag.png', 'gq_parrot.gif')
-    elif len(sys.argv) != 3:
-        print("Please provide one source file and one destination file")
-    else:
+        parrot('data/gq_flag.png', 'data/gq_parrot.gif')
+    elif len(sys.argv) == 5:
+        parrot(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4])
+    elif len(sys.argv) == 3:
         parrot(sys.argv[1], sys.argv[2])
+    else:
+        print("Please provide one source file and one destination file")
