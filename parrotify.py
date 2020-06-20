@@ -33,7 +33,7 @@ def parrot(file_path, out_path, x_delta=0, y_delta=0):
         dive the docs to find that
 
     """
-    im = Image.open('data/mega_transparent.gif')
+    im = Image.open('parrot.gif')
 
     frames = []
     # convert the parrot into an overlay mask
@@ -106,7 +106,7 @@ def parrot(file_path, out_path, x_delta=0, y_delta=0):
         if index < 1:
             tframe.save('frame.png')
 
-    im = Image.open('data/mega_blank_solid.gif')
+    im = Image.open('solid_parrot.gif')
     out = []
     for i in range(0, 10):
         x, y = FOCUS[i]
