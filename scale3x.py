@@ -335,7 +335,11 @@ def color_dist(color1, color2):
 
 
 def process_input(args):
+    print("proper usage: scale3x.py [input file]",
+            "[output file] ['cleanup-only'] [color csv file]")
+
     im = Image.open(args[1])
+
     if args[1][-4:] == '.gif':
         is_gif = True
     else:
@@ -343,7 +347,7 @@ def process_input(args):
     output_path = args[2]
     colors = None
     if len(args) >= 4:
-        cleanup = args[3] == 'Y'
+        cleanup = args[3] == 'cleanup-only'
         print(args[3])
     if len(args) >= 5:
         colors = []
