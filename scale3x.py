@@ -7,6 +7,7 @@ from PIL import Image, ImageFilter
 import numpy as np
 from copy import deepcopy
 import datetime
+import csv
 import pprint
 pp = pprint.PrettyPrinter(indent=4)
 
@@ -136,7 +137,7 @@ def color_correct(image):
                 print(out_image[i,j], image[i,j], i, j)
     return out_image
 
-def simplify_colors(in_image):
+def simplify_colors(in_image, in_colors=None):
     """ pull colors into their "most common" neighbor
 
         figure out which colors are most common, then create map of every color
@@ -144,22 +145,26 @@ def simplify_colors(in_image):
         squash.
 
     """
-    colors = in_image.getcolors(10000)
+    colors = in_image.getcolors((in_image.width * in_image.height) * 2)
     colormap = {}
     rare_colors = []
     common_colors = []
     threshold = 0.01*in_image.width*in_image.height
+    if in_colors:
+        common_colors = in_colors
     for color in colors:
         c = np.array(color[1])
-        black = np.all(c[0:3] < 10)
+        black = np.all(c[0:3] < 20)
         white = np.all(c > 250)
         if black:
             colormap[color[1]] = (0, 0, 0, 255)
         elif white:
             colormap[color[1]] = (255, 255, 255, 255)
-        elif color[0] > threshold:
+        elif ((not in_colors) and color[0] > threshold):
             colormap[color[1]] = color[1] # map to itself
             common_colors.append(color[1])
+        elif in_colors and color[1] in in_colors:
+            colormap[color[1]] = color[1] # map to itself
         else:
             rare_colors.append(color[1])
 
@@ -179,27 +184,9 @@ def simplify_colors(in_image):
 
     
     im = Image.fromarray(image, mode='RGBA')
+    im.save('colorsquash.png')
     colors = im.getcolors(len(colormap.keys())) # get every POSSIBLE color left in the image
     labeled_image = label(image, colors)
-    '''
-    original = deepcopy(image)
-    for i in range(image.shape[0]):
-        for j in range(image.shape[1]):
-            # get subsection
-            i_min = max(0, i-1); i_max = min(image.shape[0]+1, i+2)
-            j_min = max(0, j-1); j_max = min(image.shape[1]+1, j+2)
-            circle = original[i_min:i_max, j_min:j_max]
-            #print(list(range(i_min, i_max)), list(range(j_min, j_max)))
-            new_color, count = get_unique(circle)
-            circle = image[i_min:i_max, j_min:j_max]
-            other_new_color, other_count = get_unique(circle)
-            if np.all(new_color == other_new_color):
-                image[i,j] = new_color
-            elif other_count > count:
-                image[i, j] = other_new_color
-            else:
-                image[i, j] = new_color
-    '''
     return im
 
 def label(image, colors):
@@ -234,17 +221,40 @@ def label(image, colors):
                     labelled_image[i, j] = west
                 elif west == north:
                     labelled_image[i, j] = west
-                else: # combine the two regions
-                    labelled_image[i, j] = min(west, north)
-                    equivalences[max(west,north)] = min(west, north)
+                elif np.all(image[i - 1, j] == image[i, j - 1]):
+                    # different labels, neither are background.
+                    # combine the two regions IF THE COLORS ARE THE SAME
+
+                    # every time i implement this i forget about this case:
+                    # the min of west & north might not be the actual "correct" label
+                    # here because it's possible that min(west,north) is the max of
+                    # another equivalence pair
+                    keep = min(west, north)
+                    toss = max(west, north)
+                    labelled_image[i, j] = keep
+                    while keep in equivalences:
+                        keep = equivalences[keep]
+                    equivalences[toss] = keep
+                else:
+                    # diff labels, neither R BKGND, both colors diff.
+                    # Get closest color value to the current pixel
+                    # we dont have to worry about west/north being BKGND because
+                    # we just checked theyre not
+                    closest = get_closest(image[i,j], [image[i - 1, j], image[i, j - 1]])
+                    if np.all(image[i-1, j] == closest):
+                        labelled_image[i, j] = west
+                    else:
+                        labelled_image[i, j] = north
 
     colors = {}
     for i in range(image.shape[0]):
         for j in range(image.shape[1]):
             # update which section of the image this pixel is part of
             label = labelled_image[i, j]
-            if label in equivalences:
-                labelled_image[i, j] = equivalences[label]
+            while label in equivalences:
+                label = equivalences[label]
+            
+            labelled_image[i, j] = label
 
             # collect statistics on this section of the image
             label = labelled_image[i, j]
@@ -309,39 +319,91 @@ def get_closest(color, color_list):
         if dist < mindist and not (color[3] == 255 and c_color[3] != 255):
             minimum = c_color
             mindist = dist
-    if color[3] == 255 and minimum[3] != 255:
-        print(color, minimum, color_list)
     return minimum
 
 
 
 def color_dist(color1, color2):
-    dr = (color1[0] - color2[0])**2
-    dg = (color1[1] - color2[1])**2
-    db = (color1[2] - color2[2])**2
-    return (dr+dg+db)**0.5
+    try:
+        dr = (float(color1[0]) - float(color2[0]))**2
+        dg = (float(color1[1]) - float(color2[1]))**2
+        db = (float(color1[2]) - float(color2[2]))**2
+        return (int(dr+dg+db))**0.5
+    except:
+        print("EXCEPTION:", color1, color2)
+        raise
+
+
+def process_input(args):
+    im = Image.open(args[1])
+    if args[1][-4:] == '.gif':
+        is_gif = True
+    else:
+        is_gif = False
+    output_path = args[2]
+    colors = None
+    if len(args) >= 4:
+        cleanup = args[3] == 'Y'
+        print(args[3])
+    if len(args) >= 5:
+        colors = []
+        with open(args[4]) as in_colors:
+            reader = csv.reader(in_colors, delimiter=',')
+            for row in reader:
+                color = []
+                for item in row:
+                    color.append(int(item))
+                if color:
+                    colors.append(tuple(color))
+        print(colors)
+    return im, output_path, is_gif, cleanup, colors
+
+def median_filter(im):
+    image = np.array(im)
+    orig = deepcopy(image)
+
+    for i in range(orig.shape[0]):
+        for j in range(orig.shape[1]):
+            x1 = max(0, i-1); x2 = min(i+2, orig.shape[0])
+            y1 = max(0, j-1); y2 = min(j+2, orig.shape[1])
+            mtx = deepcopy(image[x1:x2, y1:y2])
+            # reshape
+            out_mtx = np.zeros(mtx.shape[0]*mtx.shape[1], dtype=tuple)
+            for a in range(mtx.shape[0]):
+                for b in range(mtx.shape[1]):
+                    out_mtx[a*mtx.shape[1]+b] = tuple(mtx[a,b])
+            out_mtx.sort()
+            image[i,j] = out_mtx[len(out_mtx) // 2]
+    return Image.fromarray(image)
 
 
 
 if __name__ == '__main__':
-    im = Image.open('parrot.gif')
-    #im = Image.open('test_image.png')
+    im, output_path, is_gif, cleanup_only, in_colors = process_input(sys.argv)
+    if is_gif:
+        n_frames = im.n_frames
+    else:
+        n_frames = 1
     frames = []
-    #for index in range(1):
-    for index in range(im.n_frames):
+    for index in range(n_frames):
         im.seek(index)
         origname = 'orig_frame_' + str(index)
-        #newname = 'new_frame_' + str(index)
         frame = deepcopy(im.convert(mode='RGBA'))
-        sharp = frame.filter(ImageFilter.SHARPEN)
-        orig_frame = simplify_colors(scale3x(in_image=sharp))
+        if cleanup_only:
+            orig_frame = simplify_colors(in_image=frame, in_colors=in_colors)
+            orig_frame.save('pre_median.png')
+            orig_frame = median_filter(orig_frame)
+        else:
+            sharp = frame.filter(ImageFilter.SHARPEN)
+            orig_frame = simplify_colors(scale3x(in_image=sharp))
         orig_frame.save(origname+'.png')
         frames.append(orig_frame)
-        #new_frame = Image.fromarray(color_correct(np.array(deepcopy(orig_frame))), mode='RGBA')
-        #new_frame.save(newname+'.png')
         pp.pprint(orig_frame.getcolors())
 
     pp.pprint(frames[0].__dict__)
     pp.pprint(frames[0].getcolors())
-    frames[0].save('3xbigger_parrot.gif', save_all=True, append_images=frames[1:], optimization=False, duration=50, loop=0, disposal=2, transparency=0)
-    frames[0].save('solid_3xbigger_parrot.gif', save_all=True, append_images=frames[1:], optimization=False, duration=50, loop=0, disposal=2)
+    if is_gif:
+        frames[0].save(output_path, save_all=True, append_images=frames[1:], optimization=False, duration=50, loop=0, disposal=2, transparency=0)
+        frames[0].save('solid_' + output_path, save_all=True, append_images=frames[1:], optimization=False, duration=50, loop=0, disposal=2)
+    else:
+        frames[0].save(output_path)
