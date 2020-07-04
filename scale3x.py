@@ -8,6 +8,9 @@ import numpy as np
 from copy import deepcopy
 import datetime
 import csv
+import math
+import multiprocessing
+from multiprocessing import Pool
 import pprint
 pp = pprint.PrettyPrinter(indent=4)
 
@@ -334,6 +337,135 @@ def color_dist(color1, color2):
         raise
 
 
+def median_filter(im):
+    image = np.array(im)
+    orig = deepcopy(image)
+
+    for i in range(orig.shape[0]):
+        for j in range(orig.shape[1]):
+            x1 = max(0, i-1); x2 = min(i+2, orig.shape[0])
+            y1 = max(0, j-1); y2 = min(j+2, orig.shape[1])
+            mtx = deepcopy(image[x1:x2, y1:y2])
+            # reshape
+            out_mtx = np.zeros(mtx.shape[0]*mtx.shape[1], dtype=tuple)
+            for a in range(mtx.shape[0]):
+                for b in range(mtx.shape[1]):
+                    out_mtx[a*mtx.shape[1]+b] = tuple(mtx[a,b])
+            out_mtx.sort()
+            image[i,j] = out_mtx[len(out_mtx) // 2]
+    return Image.fromarray(image)
+
+
+def gauss(x):
+    # im pretty sure this can be a 1D gauss
+    # we really only care about magnitude from the center because gauss is symm
+    # so it **shouldnt** need to be 2D
+    # ...i hope
+    # im pretty sure
+    pi = math.pi
+    e = math.e
+    sig = 1
+    mu = 1 # center of the kernel
+    denom = sig * math.sqrt(2*pi)
+    exponent = -(1/2) * ((x - mu) / sig) ** 2
+    return (e ** exponent) / denom
+
+
+def fr(Ixi, Ix):
+    """ Intensity kernel computation
+
+        computes the magnitude of the difference in intensities of two pixels
+        and computes the gaussian for that point. Despite the fact that the
+        sum of any one given kernel can be != zero, we're not worried about it
+        because the bilat filter deals with it.
+    """
+    return gauss(color_dist(Ixi, Ix))
+
+def gs(pi, p):
+    """ spatial kernel
+
+        Computes the spatial distance between xi and x, and uses that to compute
+        the gaussian for the point.
+    """
+    pxi, pyi = pi
+    px, py = p
+    return gauss(math.sqrt((pxi-px) ** 2 + (pyi - py) ** 2))
+
+
+def perform_filter(orig, grey, i, radius):
+    row = np.zeros(orig[i].shape, dtype=np.uint8)
+    print('i:', i)
+    for j in range(orig.shape[1]):
+        Ixi = orig[i, j]
+        numer_sum = 0
+        denom_sum = 0
+        for a in range(-radius, radius+1):
+            for b in range(-radius, radius+1):
+                xi = (i, j)
+                x = (i-a, j-b)
+                if x[0] < 0:
+                    xa = abs(i-a)
+                elif x[0] >= orig.shape[0]:
+                    edge = orig.shape[0] - 1
+                    xa = orig.shape[0] - (x[0] - edge) 
+                else:
+                    xa = x[0]
+                if x[1] < 0:
+                    xb = abs(j-b)
+                elif x[1] >= orig.shape[1]:
+                    edge = orig.shape[1] - 1
+                    xb = orig.shape[1] - (x[1] - edge)
+                else:
+                    xb = x[1]
+                x = (xa, xb)
+                f_r = fr(Ixi, orig[x[0], x[1]])
+                g_s = gs(xi, x)
+                frgs = f_r * g_s
+                numer_sum += Ixi * frgs
+                denom_sum += frgs
+        row[j] = numer_sum / denom_sum
+    return row
+
+def bilateral_filter(im, radius):
+    # for the bilateral filter, you probably want to always mirror image edges
+    # we cant use a regular convolution because our kernel changes over time
+    # TODO make the gaussian kernel computed once so i dont have to keep recalculating
+    #       identical values. (since gs kernel is constant over an image)
+    image = np.array(im)
+    orig = deepcopy(image)
+    grey = im.convert('L')
+    pool = Pool(processes=multiprocessing.cpu_count() // 2)
+    
+    results = [pool.apply_async(perform_filter, (orig, grey, i, radius)) for i in range(orig.shape[0])]
+    pool.close()
+    pool.join()
+    image = np.zeros(orig.shape, dtype=np.uint8)
+    i = 0
+    assert len(results) == image.shape[0]
+    for result in results:
+        row = result.get()
+        image[i] = row
+        if i == image.shape[0] // 2:
+            pp.pprint(image[i])
+        i += 1
+
+    """
+    assert np.all(image.shape == orig.shape)
+    for i in range(orig.shape[0]):
+        for j in range(orig.shape[1]):
+            print(orig[i,j], image[i,j], i, j, orig.shape)
+            for k in range(orig.shape[2]):
+                assert orig[i,j,k] == image[i,j,k]
+    ra = Image.fromarray(orig, mode='RGBA')
+    print("ra colors:")
+    pp.pprint(ra.getcolors())
+    """
+    ra = Image.fromarray(image, mode='RGBA')
+    print("ra colors:")
+    pp.pprint(ra.getcolors())
+    return ra
+
+
 def process_input(args):
     print("proper usage: scale3x.py [input file]",
             "[output file] ['cleanup-only'] [color csv file]")
@@ -362,28 +494,10 @@ def process_input(args):
         print(colors)
     return im, output_path, is_gif, cleanup, colors
 
-def median_filter(im):
-    image = np.array(im)
-    orig = deepcopy(image)
-
-    for i in range(orig.shape[0]):
-        for j in range(orig.shape[1]):
-            x1 = max(0, i-1); x2 = min(i+2, orig.shape[0])
-            y1 = max(0, j-1); y2 = min(j+2, orig.shape[1])
-            mtx = deepcopy(image[x1:x2, y1:y2])
-            # reshape
-            out_mtx = np.zeros(mtx.shape[0]*mtx.shape[1], dtype=tuple)
-            for a in range(mtx.shape[0]):
-                for b in range(mtx.shape[1]):
-                    out_mtx[a*mtx.shape[1]+b] = tuple(mtx[a,b])
-            out_mtx.sort()
-            image[i,j] = out_mtx[len(out_mtx) // 2]
-    return Image.fromarray(image)
-
-
 
 if __name__ == '__main__':
     im, output_path, is_gif, cleanup_only, in_colors = process_input(sys.argv)
+    print(in_colors)
     if is_gif:
         n_frames = im.n_frames
     else:
@@ -393,10 +507,18 @@ if __name__ == '__main__':
         im.seek(index)
         origname = 'orig_frame_' + str(index)
         frame = deepcopy(im.convert(mode='RGBA'))
+        print("original colors:")
+        pp.pprint(frame.getcolors())
         if cleanup_only:
-            orig_frame = simplify_colors(in_image=frame, in_colors=in_colors)
-            orig_frame.save('pre_median.png')
-            orig_frame = median_filter(orig_frame)
+            bilat_frame = bilateral_filter(frame, 10)
+            bilat_frame.save('bilat_frame.png')
+            print("post bilat colors:")
+            pp.pprint(bilat_frame.getcolors())
+            print("yeah")
+            orig_frame = simplify_colors(in_image=bilat_frame, in_colors=in_colors)
+            #orig_frame.save('pre_median.png')
+            #med_frame = median_filter(deepcopy(orig_frame))
+            #med_frame.save('post_median.png')
         else:
             sharp = frame.filter(ImageFilter.SHARPEN)
             orig_frame = simplify_colors(scale3x(in_image=sharp))
@@ -405,6 +527,7 @@ if __name__ == '__main__':
         pp.pprint(orig_frame.getcolors())
 
     pp.pprint(frames[0].__dict__)
+    print("final colors:")
     pp.pprint(frames[0].getcolors())
     if is_gif:
         frames[0].save(output_path, save_all=True, append_images=frames[1:], optimization=False, duration=50, loop=0, disposal=2, transparency=0)
