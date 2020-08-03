@@ -3,48 +3,86 @@ from PIL import Image, ImageChops
 from copy import deepcopy
 import numpy as np
 
-# look if anyone tries to critique my style here i will be upset
-# good programming practice is for work and only work
-# do you want party reaccs? then dont critique my crap style
-# theres comments and thats only because i solved my problems before bedtime
 
 COLORS = [
-    0xff8d8b,
-    0xfed689,
-    0x88ff89,
-    0x87ffff,
-    0x8bb5fe,
-    0xd78cff,
-    0xff8cff,
-    0xff68f7,
-    0xfe6cb7,
-    0xff6968,
+    (255, 141, 139),
+    (254, 214,137),
+    (136, 255, 137),
+    (135, 255, 255),
+    (139, 181, 254),
+    (215, 140, 255),
+    (255, 140, 255),
+    (255, 104, 247),
+    (254, 108, 183),
+    (255, 105, 104),
 ]
 
-def party(file_path, out_file_path):
-    ''' Takes an image and makes it party.
 
-        doesnt read in a gif only a still image.
-        i'll figure out gifs later.
-        one thing at a time.
-        Chris do NOT provide suggestions on how to do gifs.
+def color_dist(color1, color2):
+    squ_diffs = [(c1-c2)**2 for c1,c2 in zip(color1, color2)]
+    return sum(squ_diffs)**0.5
+
+
+def color_by_pixel(image, color):
+    width = image.shape[0]
+    height = image.shape[1]
+    for x in range(width):
+        for y in range(height):
+            if image[x,y,3] < 155:
+                image[x,y] = [0, 0, 0, 0]
+                continue
+            if color_dist(image[x, y][0:3], [0, 0, 0]) < 50:
+                image[x][y] = [color[0], color[1], color[2], 255]
+    return Image.fromarray(image, mode='RGBA').convert('RGB')
+
+
+def multiply(image1, image2):
+    width = image1.shape[0]
+    height = image1.shape[1]
+    array = np.zeros(list(image1.shape), dtype=np.uint8)
+    print(image1.shape)
+    print(array.shape)
+    for x in range(width):
+        for y in range(height):
+            c1 = image1[x,y]
+            c2 = image2[x,y]
+            cout = [np.uint8(int(p1)*int(p2)/255) for p1,p2 in zip(c1, c2)]
+            array[x,y] = cout
+    return Image.fromarray(array, mode='RGBA')
+
+
+def party(file_path, out_file_path, replace_black=False):
+    ''' Takes an image and makes it party.
 
         just because this produces gifs doesnt mean that it will
         produce gifs *for mattermost*
         you probably will need to resize the image
     '''
-    im = Image.open(file_path)
+    im = Image.open(file_path).convert('RGBA')
     out_images = []
-    for frame in range(0, 10):
-        color_image = Image.new('RGBA', (im.height, im.width), COLORS[frame])
-        image = ImageChops.multiply(color_image, im)
-        out_images.append(image)
+    for index in range(0, 10):
+        if not replace_black:
+            color_image = Image.new('RGBA', (im.height, im.width), COLORS[index])
+            image = multiply(np.array(color_image), np.array(im))
+            out_images.append(image)
+        else:
+            image = color_by_pixel(np.array(deepcopy(im)), COLORS[index])
+            out_images.append(image)
 
-    out_images[0].save(out_file_path, save_all=True, append_images=out_images[1:], optimize=True, duration=50, loop=0)
+    for i in range(len(out_images)):
+        out_images[i].save("frame" + str(i) + ".png")
+    out_images[0].save(out_file_path, save_all=True, append_images=out_images[1:], optimize=False, duration=50, loop=0, transparency=0, disposal=2)
 
 if __name__ == '__main__':
     if len(sys.argv) == 1:
         party('smile_cry.png', 'smile_cry.gif')
+    elif len(sys.argv) == 4:
+        if sys.argv[3] == "True":
+            replace_black = True
+            print("Replacing black in image")
+        else:
+            replace_black = False
+        party(sys.argv[1], sys.argv[2], replace_black=replace_black)
     elif len(sys.argv) != 3:
         print("Please provide one source file and one destination file")
     else:

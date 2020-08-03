@@ -159,7 +159,9 @@ def simplify_colors(in_image, in_colors=None):
         c = np.array(color[1])
         black = np.all(c[0:3] < 20)
         white = np.all(c > 250)
-        if black:
+        if c[3] < 200:
+            colormap[color[1]] = (0, 0, 0, 0)
+        elif black:
             colormap[color[1]] = (0, 0, 0, 255)
         elif white:
             colormap[color[1]] = (255, 255, 255, 255)
@@ -173,7 +175,7 @@ def simplify_colors(in_image, in_colors=None):
 
     # squash the colorspace
     for color in rare_colors:
-        if color[3] < 255: # if not completely opaque, make 100% transparent
+        if color[3] < 155: # if not mostly opaque, make 100% transparent
             colormap[color] = (255, 255, 255, 0)
             continue
         # find nearest neighbor to map to
@@ -355,23 +357,28 @@ def median_filter(im):
             image[i,j] = out_mtx[len(out_mtx) // 2]
     return Image.fromarray(image)
 
+GAUSS = {}
 
-def gauss(x):
+def gauss(x, radius):
     # im pretty sure this can be a 1D gauss
     # we really only care about magnitude from the center because gauss is symm
     # so it **shouldnt** need to be 2D
     # ...i hope
     # im pretty sure
-    pi = math.pi
-    e = math.e
-    sig = 1
-    mu = 1 # center of the kernel
-    denom = sig * math.sqrt(2*pi)
-    exponent = -(1/2) * ((x - mu) / sig) ** 2
-    return (e ** exponent) / denom
+    if (x, radius) in GAUSS: # dont recompute stuff
+        return GAUSS[(x,radius)]
+    else:
+        pi = math.pi
+        e = math.e
+        sig = radius/2
+        mu = radius # center of the kernel
+        denom = sig * math.sqrt(2*pi)
+        exponent = -(1/2) * ((x - mu) / sig) ** 2
+        GAUSS[(x, radius)] = (e ** exponent) / denom
+        return GAUSS[(x, radius)]
 
 
-def fr(Ixi, Ix):
+def fr(Ixi, Ix, radius):
     """ Intensity kernel computation
 
         computes the magnitude of the difference in intensities of two pixels
@@ -379,9 +386,9 @@ def fr(Ixi, Ix):
         sum of any one given kernel can be != zero, we're not worried about it
         because the bilat filter deals with it.
     """
-    return gauss(color_dist(Ixi, Ix))
+    return gauss(color_dist(Ixi, Ix), radius)
 
-def gs(pi, p):
+def gs(pi, p, radius):
     """ spatial kernel
 
         Computes the spatial distance between xi and x, and uses that to compute
@@ -389,7 +396,7 @@ def gs(pi, p):
     """
     pxi, pyi = pi
     px, py = p
-    return gauss(math.sqrt((pxi-px) ** 2 + (pyi - py) ** 2))
+    return gauss(math.sqrt((pxi - px) ** 2 + (pyi - py) ** 2), radius)
 
 
 def perform_filter(orig, grey, i, radius):
@@ -418,12 +425,12 @@ def perform_filter(orig, grey, i, radius):
                 else:
                     xb = x[1]
                 x = (xa, xb)
-                f_r = fr(Ixi, orig[x[0], x[1]])
-                g_s = gs(xi, x)
+                f_r = fr(Ixi, orig[x[0], x[1]], radius)
+                g_s = gs(xi, x, radius)
                 frgs = f_r * g_s
                 numer_sum += Ixi * frgs
                 denom_sum += frgs
-        row[j] = numer_sum / denom_sum
+        row[j] = numer_sum // denom_sum
     return row
 
 def bilateral_filter(im, radius):
@@ -449,17 +456,6 @@ def bilateral_filter(im, radius):
             pp.pprint(image[i])
         i += 1
 
-    """
-    assert np.all(image.shape == orig.shape)
-    for i in range(orig.shape[0]):
-        for j in range(orig.shape[1]):
-            print(orig[i,j], image[i,j], i, j, orig.shape)
-            for k in range(orig.shape[2]):
-                assert orig[i,j,k] == image[i,j,k]
-    ra = Image.fromarray(orig, mode='RGBA')
-    print("ra colors:")
-    pp.pprint(ra.getcolors())
-    """
     ra = Image.fromarray(image, mode='RGBA')
     print("ra colors:")
     pp.pprint(ra.getcolors())
@@ -513,8 +509,8 @@ if __name__ == '__main__':
             bilat_frame = bilateral_filter(frame, 10)
             bilat_frame.save('bilat_frame.png')
             print("post bilat colors:")
-            pp.pprint(bilat_frame.getcolors())
-            print("yeah")
+            pp.pprint(bilat_frame.getcolors(700**2))
+            print("simplifying colorset to: ", in_colors)
             orig_frame = simplify_colors(in_image=bilat_frame, in_colors=in_colors)
             #orig_frame.save('pre_median.png')
             #med_frame = median_filter(deepcopy(orig_frame))
