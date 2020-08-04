@@ -5,3 +5,4 @@ TODOs:
 - add some more fun transforms
 - rewrite parrotify to not have fringing
 - add a 'make it gay' option that generates all the pride parrots
+- use argparse
