@@ -149,6 +149,9 @@ def simplify_colors(in_image, in_colors=None):
 
     """
     colors = in_image.getcolors((in_image.width * in_image.height) * 2)
+    add_colors = True
+    if in_colors:
+        add_colors = False
     colormap = {}
     rare_colors = []
     common_colors = []
@@ -175,13 +178,18 @@ def simplify_colors(in_image, in_colors=None):
 
     # squash the colorspace
     for color in rare_colors:
-        if color[3] < 155: # if not mostly opaque, make 100% transparent
+        if color[3] < 155: # if not completely opaque, make 100% transparent
             colormap[color] = (255, 255, 255, 0)
             continue
         # find nearest neighbor to map to
         if not color in colormap:
-            colormap[color] = get_closest(color, common_colors)
+            if in_colors:
+                colormap[color] = get_closest(color, in_colors)
+            else:
+                colormap[color] = get_closest(color, common_colors)
     
+    print("in colors:", in_colors)
+    print("colormap:", set(colormap.values()))
     image = np.array(in_image)
     for i in range(image.shape[0]):
         for j in range(image.shape[1]):
@@ -459,6 +467,7 @@ def bilateral_filter(im, radius):
     ra = Image.fromarray(image, mode='RGBA')
     print("ra colors:")
     pp.pprint(ra.getcolors())
+    pp.pprint(image)
     return ra
 
 
@@ -474,6 +483,7 @@ def process_input(args):
         is_gif = False
     output_path = args[2]
     colors = None
+    cleanup = None
     if len(args) >= 4:
         cleanup = args[3] == 'cleanup-only'
         print(args[3])
@@ -517,7 +527,7 @@ if __name__ == '__main__':
             #med_frame.save('post_median.png')
         else:
             sharp = frame.filter(ImageFilter.SHARPEN)
-            orig_frame = simplify_colors(scale3x(in_image=sharp))
+            orig_frame = simplify_colors(scale3x(in_image=sharp), in_colors=in_colors)
         orig_frame.save(origname+'.png')
         frames.append(orig_frame)
         pp.pprint(orig_frame.getcolors())
