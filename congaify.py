@@ -7,9 +7,9 @@ import sys
 from copy import deepcopy
 
 
-def conga(source, destination, period=40):
+def conga(source, destination, direction=None, flip=None):
     """ Make your parrots/troys/etc conga
-        
+
         source is the original gif
         destination is where you want it
         period is the duration of a given frame

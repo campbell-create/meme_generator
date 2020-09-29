@@ -63,7 +63,7 @@ def party(file_path, out_file_path, replace_black=False, num_frames=10, offset=0
         i = (index + offset) % len(COLORS)
         print(i)
         if not replace_black:
-            color_image = Image.new('RGBA', (im.height, im.width), COLORS[i])
+            color_image = Image.new('RGBA', (im.width, im.height), COLORS[i])
             image = multiply(np.array(color_image), np.array(im))
             out_images.append(image.convert('RGB'))
         else:
